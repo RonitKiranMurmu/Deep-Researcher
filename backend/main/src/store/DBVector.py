@@ -32,6 +32,36 @@ logging.basicConfig(level=logging.INFO)
 _std_logger = logging.getLogger(__name__)
 
 
+def _log_db_event(level: str, message: str, urgency: str = "none") -> None:
+    """
+    ## Description
+
+    Global helper to emit log entries to the standard Python logger and `DRLogger`.
+
+    ## Parameters
+
+    - `level` (`str`) — `"info"`, `"success"`, or `"error"`.
+    - `message` (`str`) — Event description.
+    - `urgency` (`str`) — `"none"`, `"moderate"`, or `"critical"`. Defaults to `"none"`.
+    """
+    if level == "error":
+        _std_logger.error(message)
+    else:
+        _std_logger.info(message)
+
+    try:
+        dr_logger.log(
+            log_type=level,
+            message=message,
+            origin="system",
+            module="DB",
+            urgency=urgency,  # type: ignore
+            app_version=getAppVersion(),
+        )
+    except Exception as e:
+        _std_logger.error(f"DRLogger internal failure in DBVectorManager: {e}")
+
+
 class DBVectorManager:
     """
     ## Description
@@ -79,14 +109,7 @@ class DBVectorManager:
             error_msg = "chromadb is not installed. Run: uv add chromadb"
             _std_logger.error(error_msg)
             try:
-                dr_logger.log(
-                    log_type="error",
-                    message=error_msg,
-                    origin="system",
-                    module="DB",
-                    urgency="critical",
-                    app_version=getAppVersion(),
-                )
+                _log_db_event("error", error_msg, "critical")
             except Exception:
                 pass
             raise RuntimeError(error_msg)
@@ -100,50 +123,10 @@ class DBVectorManager:
         """
         ## Description
 
-        Emits a log entry to the standard Python logger and `DRLogger`.
-
-        ## Parameters
-
-        - `level` (`str`) — `"info"`, `"success"`, or `"error"`.
-        - `message` (`str`) — Event description.
-        - `urgency` (`str`) — `"none"`, `"moderate"`, or `"critical"`. Defaults to `"none"`.
-
-        ## Returns
-
-        `None`
-
-        ## Raises
-
-        - `None` — DRLogger failures are silently caught.
-
-        ## Side Effects
-
-        - Writes to terminal and to `logs.db.sqlite3` via `DRLogger`.
-
-        ## Debug Notes
-
-        - DRLogger failures are printed to terminal but do not raise.
-
-        ## Customization
-
-        - Extend with `"warning"` level support if needed.
+        Instance-level wrapper for global `_log_db_event`.
+        Preserves existing API for methods within this class.
         """
-        if level == "error":
-            _std_logger.error(message)
-        else:
-            _std_logger.info(message)
-
-        try:
-            dr_logger.log(
-                log_type=level,
-                message=message,
-                origin="system",
-                module="DB",
-                urgency=urgency,  # type: ignore
-                app_version=getAppVersion(),
-            )
-        except Exception as e:
-            _std_logger.error(f"DRLogger internal failure in DBVectorManager: {e}")
+        _log_db_event(level, message, urgency)
 
     def add(
         self,
@@ -632,26 +615,11 @@ def _initialize_chroma_store() -> None:
     chroma_store_dir = BASE_DIR / "database" / "chroma_store"
     try:
         chroma_store_dir.mkdir(parents=True, exist_ok=True)
-        _std_logger.info(f"ChromaDB storage directory ensured: {chroma_store_dir}")
-        dr_logger.log(
-            log_type="success",
-            message=f"ChromaDB storage directory ensured: {chroma_store_dir}",
-            origin="system",
-            module="DB",
-            urgency="none",
-            app_version=getAppVersion(),
-        )
+        _log_db_event("success", f"ChromaDB storage directory ensured: {chroma_store_dir}")
     except Exception as e:
         _std_logger.error(f"Failed to initialize ChromaDB store directory: {e}")
         try:
-            dr_logger.log(
-                log_type="error",
-                message=f"Failed to initialize ChromaDB store directory: {e}",
-                origin="system",
-                module="DB",
-                urgency="critical",
-                app_version=getAppVersion(),
-            )
+            _log_db_event("error", f"Failed to initialize ChromaDB store directory: {e}", "critical")
         except Exception:
             pass
 
