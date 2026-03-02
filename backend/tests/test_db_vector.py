@@ -46,6 +46,11 @@ class TestDBVectorManager(unittest.TestCase):
     def tearDown(self) -> None:
         self.patcher.stop()
 
+    def test_log(self) -> None:
+        """Verify that logs are emitted."""
+        self.manager._log("info", "Test log message")
+        self.mock_logger.log.assert_called()
+
     # -----------------------------------------------------------------------
 
     def test_add_and_fetch_one(self) -> None:

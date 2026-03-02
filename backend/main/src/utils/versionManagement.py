@@ -13,6 +13,11 @@ LOG_SOURCE = "system"
 LOG_TAGS = ["VERSION_MANAGEMENT"]
 
 
+def getAppVersion():
+    """Public function to get the current application version."""
+    return _get_version()
+
+
 def _get_version():
     return f"{MAJOR_CHANGE}.{NEW_FEATURE}.{MINOR_BUGFIXES}"
 
