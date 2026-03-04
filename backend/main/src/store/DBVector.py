@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import logging
 import sys
-
+import chromadb
+from main.src.utils.DRLogger import dr_logger, LogType
+from main.src.utils.versionManagement import getAppVersion
 # ------------------------------------------------------------------
 # Path bootstrap
 # ------------------------------------------------------------------
@@ -19,43 +21,23 @@ for _p in [str(src_dir), str(src_dir.parent)]:
     if _p not in sys.path:
         sys.path.append(_p)
 
-from main.src.utils.DRLogger import dr_logger
-from main.src.utils.versionManagement import getAppVersion
-
-try:
-    import chromadb
-    _CHROMA_AVAILABLE = True
-except ImportError:
-    _CHROMA_AVAILABLE = False
-
 logging.basicConfig(level=logging.INFO)
 _std_logger = logging.getLogger(__name__)
 
-
-def _log_db_event(level: str, message: str, urgency: str = "none") -> None:
-    """
-    ## Description
-
-    Global helper to emit log entries to the standard Python logger and `DRLogger`.
-
-    ## Parameters
-
-    - `level` (`str`) — `"info"`, `"success"`, or `"error"`.
-    - `message` (`str`) — Event description.
-    - `urgency` (`str`) — `"none"`, `"moderate"`, or `"critical"`. Defaults to `"none"`.
-    """
+def global_log(level: LogType, message: str, urgency: str = "none") -> None:
     if level == "error":
         _std_logger.error(message)
+    elif level == "warning":
+        _std_logger.warning(message)
     else:
         _std_logger.info(message)
-
     try:
         dr_logger.log(
             log_type=level,
             message=message,
             origin="system",
             module="DB",
-            urgency=urgency,  # type: ignore
+            urgency=urgency,
             app_version=getAppVersion(),
         )
     except Exception as e:
@@ -88,7 +70,7 @@ class DBVectorManager:
 
     ## Raises
 
-    - `RuntimeError` — when `chromadb` is not installed.
+    - `None`
 
     ## Side Effects
 
@@ -97,7 +79,7 @@ class DBVectorManager:
 
     ## Debug Notes
 
-    - Install chromadb via `uv add chromadb` if import fails.
+    - Ensure `chromadb` is installed via `uv add chromadb`.
 
     ## Customization
 
@@ -105,28 +87,12 @@ class DBVectorManager:
     """
 
     def __init__(self, persist_directory: Union[str, Path], collection_name: str) -> None:
-        if not _CHROMA_AVAILABLE:
-            error_msg = "chromadb is not installed. Run: uv add chromadb"
-            _std_logger.error(error_msg)
-            try:
-                _log_db_event("error", error_msg, "critical")
-            except Exception:
-                pass
-            raise RuntimeError(error_msg)
-
         self.persist_directory = str(persist_directory)
         self.collection_name = collection_name
+        global_log("info", f"Initializing DBVectorManager for '{self.collection_name}' at '{self.persist_directory}'")
         self._client = chromadb.PersistentClient(path=self.persist_directory)
         self._collection = self._client.get_or_create_collection(name=self.collection_name)
-
-    def _log(self, level: str, message: str, urgency: str = "none") -> None:
-        """
-        ## Description
-
-        Instance-level wrapper for global `_log_db_event`.
-        Preserves existing API for methods within this class.
-        """
-        _log_db_event(level, message, urgency)
+        global_log("success", f"DBVectorManager initialized for '{self.collection_name}'")
 
     def add(
         self,
@@ -187,9 +153,11 @@ class DBVectorManager:
 
         - For upsert semantics, extend to call `_collection.upsert()`.
         """
+        global_log("info", f"Executing add() for {len(ids) if ids else 0} document(s) to '{self.collection_name}'.")
+
         if not ids:
             msg = "ids must be a non-empty list."
-            self._log("error", msg, "moderate")
+            global_log("error", msg, "moderate")
             return {"success": False, "message": msg, "data": None}
 
         try:
@@ -198,7 +166,7 @@ class DBVectorManager:
             if existing.get("ids"):
                 found = existing["ids"][0]
                 msg = f"ID '{found}' already exists."
-                self._log("error", msg, "moderate")
+                global_log("error", msg, "moderate")
                 return {"success": False, "message": msg, "data": None}
 
             kwargs: Dict[str, Any] = {"ids": ids}
@@ -211,14 +179,14 @@ class DBVectorManager:
 
             self._collection.add(**kwargs)
             count = len(ids)
-            self._log("success", f"Added {count} document(s) to '{self.collection_name}'.")
+            global_log("success", f"Added {count} document(s) to '{self.collection_name}'.")
             return {
                 "success": True,
                 "message": f"{count} document(s) added to collection '{self.collection_name}'",
                 "data": {"count": count},
             }
         except Exception as e:
-            self._log("error", f"Error adding to '{self.collection_name}': {e}", "moderate")
+            global_log("error", f"Error adding to '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
     def fetch_all(
@@ -278,6 +246,7 @@ class DBVectorManager:
 
         - Add `"embeddings"` to the `include` list inside `.get()` if raw vectors are needed.
         """
+        global_log("info", f"Executing fetch_all() on '{self.collection_name}'. limit={limit}, offset={offset}")
         try:
             kwargs: Dict[str, Any] = {"include": ["documents", "metadatas"]}
             if where is not None:
@@ -289,7 +258,7 @@ class DBVectorManager:
 
             result = self._collection.get(**kwargs)
             ids = result.get("ids", [])
-            self._log("success", f"Fetched {len(ids)} document(s) from '{self.collection_name}'.")
+            global_log("success", f"Fetched {len(ids)} document(s) from '{self.collection_name}'.")
             return {
                 "success": True,
                 "message": f"Fetched {len(ids)} document(s) from collection '{self.collection_name}'",
@@ -301,7 +270,7 @@ class DBVectorManager:
                 },
             }
         except Exception as e:
-            self._log("error", f"Error fetching from '{self.collection_name}': {e}", "moderate")
+            global_log("error", f"Error fetching from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
     def fetch_one(self, id: str) -> Dict[str, Any]:
@@ -344,9 +313,11 @@ class DBVectorManager:
 
         - Add `"embeddings"` to the `include` list to return raw vectors.
         """
+        global_log("info", f"Executing fetch_one() for '{id}' on '{self.collection_name}'.")
+
         if not id:
             msg = "id must be a non-empty string."
-            self._log("error", msg, "moderate")
+            global_log("error", msg, "moderate")
             return {"success": False, "message": msg, "data": None}
 
         try:
@@ -355,7 +326,7 @@ class DBVectorManager:
 
             if not ids:
                 msg = f"Document '{id}' not found in collection '{self.collection_name}'"
-                self._log("info", msg)  # Not an error, just not found
+                global_log("info", msg)  # Not an error, just not found
                 return {
                     "success": True,
                     "message": msg,
@@ -364,14 +335,14 @@ class DBVectorManager:
 
             docs = result.get("documents") or [None]
             metas = result.get("metadatas") or [None]
-            self._log("success", f"Document '{id}' fetched from '{self.collection_name}'.")
+            global_log("success", f"Document '{id}' fetched from '{self.collection_name}'.")
             return {
                 "success": True,
                 "message": f"Document '{id}' fetched successfully",
                 "data": {"id": ids[0], "document": docs[0], "metadata": metas[0]},
             }
         except Exception as e:
-            self._log("error", f"Error fetching '{id}' from '{self.collection_name}': {e}", "moderate")
+            global_log("error", f"Error fetching '{id}' from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
     def update(
@@ -434,14 +405,16 @@ class DBVectorManager:
 
         - For upsert (add if missing), call `_collection.upsert()` directly.
         """
+        global_log("info", f"Executing update() for {len(ids) if ids else 0} document(s) in '{self.collection_name}'.")
+
         if not ids:
             msg = "ids must be a non-empty list."
-            self._log("error", msg, "moderate")
+            global_log("error", msg, "moderate")
             return {"success": False, "message": msg, "data": None}
 
         if documents is None and metadatas is None and embeddings is None:
             msg = "Update requires at least one of: documents, metadatas, embeddings."
-            self._log("error", msg, "moderate")
+            global_log("error", msg, "moderate")
             return {
                 "success": False,
                 "message": msg,
@@ -459,14 +432,14 @@ class DBVectorManager:
 
             self._collection.update(**kwargs)
             count = len(ids)
-            self._log("success", f"Updated {count} document(s) in '{self.collection_name}'.")
+            global_log("success", f"Updated {count} document(s) in '{self.collection_name}'.")
             return {
                 "success": True,
                 "message": f"{count} document(s) updated in collection '{self.collection_name}'",
                 "data": {"count": count},
             }
         except Exception as e:
-            self._log("error", f"Error updating '{self.collection_name}': {e}", "moderate")
+            global_log("error", f"Error updating '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
     def delete(self, ids: List[str]) -> Dict[str, Any]:
@@ -509,9 +482,11 @@ class DBVectorManager:
 
         - For metadata-based bulk deletions, extend to call `_collection.delete(where={...})`.
         """
+        global_log("info", f"Executing delete() for {len(ids) if ids else 0} document(s) from '{self.collection_name}'.")
+
         if not ids:
             msg = "delete() requires a non-empty ids list."
-            self._log("error", msg, "moderate")
+            global_log("error", msg, "moderate")
             return {
                 "success": False,
                 "message": msg,
@@ -521,14 +496,14 @@ class DBVectorManager:
         try:
             self._collection.delete(ids=ids)
             count = len(ids)
-            self._log("success", f"Deleted {count} document(s) from '{self.collection_name}'.")
+            global_log("success", f"Deleted {count} document(s) from '{self.collection_name}'.")
             return {
                 "success": True,
                 "message": f"{count} document(s) deleted from collection '{self.collection_name}'",
                 "data": {"count": count},
             }
         except Exception as e:
-            self._log("error", f"Error deleting from '{self.collection_name}': {e}", "moderate")
+            global_log("error", f"Error deleting from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
     def collection_exists(self) -> Dict[str, Any]:
@@ -566,6 +541,8 @@ class DBVectorManager:
 
         - Use `count` to drive pagination decisions in `fetch_all()`.
         """
+        global_log("info", f"Executing collection_exists() for '{self.collection_name}'.")
+
         try:
             count = self._collection.count()
             return {
@@ -574,7 +551,7 @@ class DBVectorManager:
                 "data": {"collection_name": self.collection_name, "count": count},
             }
         except Exception as e:
-            self._log("error", f"Collection '{self.collection_name}' not accessible: {e}", "critical")
+            global_log("error", f"Collection '{self.collection_name}' not accessible: {e}", "critical")
             return {
                 "success": False,
                 "message": f"Collection '{self.collection_name}' is not accessible: {e}",
@@ -615,29 +592,41 @@ def _initialize_chroma_store() -> None:
     chroma_store_dir = BASE_DIR / "database" / "chroma_store"
     try:
         chroma_store_dir.mkdir(parents=True, exist_ok=True)
-        _log_db_event("success", f"ChromaDB storage directory ensured: {chroma_store_dir}")
+        _std_logger.info(f"ChromaDB storage directory ensured: {chroma_store_dir}")
+        dr_logger.log(
+            log_type="success",
+            message=f"ChromaDB storage directory ensured: {chroma_store_dir}",
+            origin="system",
+            module="DB",
+            urgency="none",
+            app_version=getAppVersion(),
+        )
     except Exception as e:
         _std_logger.error(f"Failed to initialize ChromaDB store directory: {e}")
         try:
-            _log_db_event("error", f"Failed to initialize ChromaDB store directory: {e}", "critical")
+            dr_logger.log(
+                log_type="error",
+                message=f"Failed to initialize ChromaDB store directory: {e}",
+                origin="system",
+                module="DB",
+                urgency="critical",
+                app_version=getAppVersion(),
+            )
         except Exception:
             pass
 
 
 # Run on import
 if not any("unittest" in arg for arg in sys.argv) and not any("pytest" in arg for arg in sys.argv):
-     _initialize_chroma_store()
+    _initialize_chroma_store()
 
 # Singleton export — SDK-style, mirrors DBManager pattern
 _chroma_store_path = BASE_DIR / "database" / "chroma_store"
 
-if _CHROMA_AVAILABLE:
-    # This instantiation triggers two things:
-    # 1. chromadb.PersistentClient(...) -> Creates the folder/database if missing.
-    # 2. get_or_create_collection(...)  -> Creates the specific collection if missing.
-    db_vector_manager = DBVectorManager(
-        persist_directory=_chroma_store_path,
-        collection_name="research_documents",
-    )
-else:
-    db_vector_manager = None  # type: ignore
+# This instantiation triggers two things:
+# 1. chromadb.PersistentClient(...) -> Creates the folder/database if missing.
+# 2. get_or_create_collection(...)  -> Creates the specific collection if missing.
+db_vector_manager = DBVectorManager(
+    persist_directory=_chroma_store_path,
+    collection_name="research_documents",
+)

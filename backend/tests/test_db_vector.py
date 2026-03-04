@@ -37,6 +37,8 @@ class TestDBVectorManager(unittest.TestCase):
         # Mock dr_logger to avoid persistent side effects
         self.patcher = patch("main.src.store.DBVector.dr_logger")
         self.mock_logger = self.patcher.start()
+        self.patcher_global = patch("main.src.store.DBVector.global_log")
+        self.mock_global_log = self.patcher_global.start()
         
         # Unique collection name per test to ensure isolation
         import uuid
@@ -45,11 +47,12 @@ class TestDBVectorManager(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.patcher.stop()
+        self.patcher_global.stop()
 
     def test_log(self) -> None:
         """Verify that logs are emitted."""
         self.manager._log("info", "Test log message")
-        self.mock_logger.log.assert_called()
+        self.mock_global_log.assert_called()
 
     # -----------------------------------------------------------------------
 
