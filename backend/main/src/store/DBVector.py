@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import logging
 import sys
+import asyncio
 import chromadb
+import chromadb.utils.embedding_functions as embedding_functions
 from main.src.utils.DRLogger import dr_logger, LogType
 from main.src.utils.versionManagement import getAppVersion
 # ------------------------------------------------------------------
@@ -91,10 +93,20 @@ class DBVectorManager:
         self.collection_name = collection_name
         global_log("info", f"Initializing DBVectorManager for '{self.collection_name}' at '{self.persist_directory}'")
         self._client = chromadb.PersistentClient(path=self.persist_directory)
-        self._collection = self._client.get_or_create_collection(name=self.collection_name)
+        
+        # Configure embeddinggemma:latest using Ollama
+        self._ef = embedding_functions.OllamaEmbeddingFunction(
+            url="http://localhost:11434/api/embeddings",
+            model_name="embeddinggemma:latest",
+        )
+        
+        self._collection = self._client.get_or_create_collection(
+            name=self.collection_name,
+            embedding_function=self._ef
+        )
         global_log("success", f"DBVectorManager initialized for '{self.collection_name}'")
 
-    def add(
+    async def add(
         self,
         ids: List[str],
         documents: Optional[List[str]] = None,
@@ -162,7 +174,7 @@ class DBVectorManager:
 
         try:
             # Check for existing IDs — chromadb 1.5.2+ silently ignores duplicates
-            existing = self._collection.get(ids=ids)
+            existing = await asyncio.to_thread(self._collection.get, ids=ids)
             if existing.get("ids"):
                 found = existing["ids"][0]
                 msg = f"ID '{found}' already exists."
@@ -177,7 +189,7 @@ class DBVectorManager:
             if embeddings is not None:
                 kwargs["embeddings"] = embeddings
 
-            self._collection.add(**kwargs)
+            await asyncio.to_thread(self._collection.add, **kwargs)
             count = len(ids)
             global_log("success", f"Added {count} document(s) to '{self.collection_name}'.")
             return {
@@ -189,7 +201,7 @@ class DBVectorManager:
             global_log("error", f"Error adding to '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
-    def fetch_all(
+    async def fetch_all(
         self,
         where: Optional[Dict[str, Any]] = None,
         limit: Optional[int] = None,
@@ -256,7 +268,7 @@ class DBVectorManager:
             if offset is not None:
                 kwargs["offset"] = offset
 
-            result = self._collection.get(**kwargs)
+            result = await asyncio.to_thread(self._collection.get, **kwargs)
             ids = result.get("ids", [])
             global_log("success", f"Fetched {len(ids)} document(s) from '{self.collection_name}'.")
             return {
@@ -273,7 +285,7 @@ class DBVectorManager:
             global_log("error", f"Error fetching from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
-    def fetch_one(self, id: str) -> Dict[str, Any]:
+    async def fetch_one(self, id: str) -> Dict[str, Any]:
         """
         ## Description
 
@@ -321,7 +333,9 @@ class DBVectorManager:
             return {"success": False, "message": msg, "data": None}
 
         try:
-            result = self._collection.get(ids=[id], include=["documents", "metadatas"])
+            result = await asyncio.to_thread(
+                self._collection.get, ids=[id], include=["documents", "metadatas"]
+            )
             ids = result.get("ids", [])
 
             if not ids:
@@ -345,7 +359,7 @@ class DBVectorManager:
             global_log("error", f"Error fetching '{id}' from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
-    def update(
+    async def update(
         self,
         ids: List[str],
         documents: Optional[List[str]] = None,
@@ -430,7 +444,7 @@ class DBVectorManager:
             if embeddings is not None:
                 kwargs["embeddings"] = embeddings
 
-            self._collection.update(**kwargs)
+            await asyncio.to_thread(self._collection.update, **kwargs)
             count = len(ids)
             global_log("success", f"Updated {count} document(s) in '{self.collection_name}'.")
             return {
@@ -442,7 +456,7 @@ class DBVectorManager:
             global_log("error", f"Error updating '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
-    def delete(self, ids: List[str]) -> Dict[str, Any]:
+    async def delete(self, ids: List[str]) -> Dict[str, Any]:
         """
         ## Description
 
@@ -494,7 +508,7 @@ class DBVectorManager:
             }
 
         try:
-            self._collection.delete(ids=ids)
+            await asyncio.to_thread(self._collection.delete, ids=ids)
             count = len(ids)
             global_log("success", f"Deleted {count} document(s) from '{self.collection_name}'.")
             return {
@@ -506,7 +520,7 @@ class DBVectorManager:
             global_log("error", f"Error deleting from '{self.collection_name}': {e}", "moderate")
             return {"success": False, "message": str(e), "data": None}
 
-    def collection_exists(self) -> Dict[str, Any]:
+    async def collection_exists(self) -> Dict[str, Any]:
         """
         ## Description
 
@@ -544,7 +558,7 @@ class DBVectorManager:
         global_log("info", f"Executing collection_exists() for '{self.collection_name}'.")
 
         try:
-            count = self._collection.count()
+            count = await asyncio.to_thread(self._collection.count)
             return {
                 "success": True,
                 "message": f"Collection '{self.collection_name}' exists and is accessible",
