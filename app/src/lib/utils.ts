@@ -1,51 +1,51 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
-import { getRuntimeBackendBaseUrl } from '@/lib/backend-config'
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+import { getRuntimeBackendBaseUrl } from "@/lib/backend-config";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export function resolveApiAssetUrl(path?: string | null) {
-  if (!path) return null
-  if (/^https?:\/\//i.test(path)) return path
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
 
-  const baseUrl = getRuntimeBackendBaseUrl()
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${normalizedBase}${normalizedPath}`
+  const baseUrl = getRuntimeBackendBaseUrl();
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
 }
 
 export interface LinkMetadata {
-  title?: string
-  description?: string
-  ogImage?: string
+  title?: string;
+  description?: string;
+  ogImage?: string;
 }
 
 // In-memory cache for metadata
-const metadataCache = new Map<string, LinkMetadata>()
-const CACHE_KEY = 'link_metadata_cache'
+const metadataCache = new Map<string, LinkMetadata>();
+const CACHE_KEY = "link_metadata_cache";
 
 // Load cache from localStorage on initialization
 try {
-  const cachedData = localStorage.getItem(CACHE_KEY)
+  const cachedData = localStorage.getItem(CACHE_KEY);
   if (cachedData) {
-    const parsed = JSON.parse(cachedData)
+    const parsed = JSON.parse(cachedData);
     Object.entries(parsed).forEach(([url, metadata]) => {
-      metadataCache.set(url, metadata as LinkMetadata)
-    })
+      metadataCache.set(url, metadata as LinkMetadata);
+    });
   }
 } catch (error) {
-  console.error('Failed to load metadata cache:', error)
+  console.error("Failed to load metadata cache:", error);
 }
 
 // Save cache to localStorage
 function saveCache() {
   try {
-    const cacheObject = Object.fromEntries(metadataCache.entries())
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheObject))
+    const cacheObject = Object.fromEntries(metadataCache.entries());
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheObject));
   } catch (error) {
-    console.error('Failed to save metadata cache:', error)
+    console.error("Failed to save metadata cache:", error);
   }
 }
 
@@ -57,19 +57,19 @@ function saveCache() {
 async function imageToBase64(imageUrl: string): Promise<string> {
   try {
     // Use CORS proxy to fetch the image
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`
-    const response = await fetch(proxyUrl)
-    const blob = await response.blob()
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(imageUrl)}`;
+    const response = await fetch(proxyUrl);
+    const blob = await response.blob();
 
     return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   } catch (error) {
-    console.error('Failed to convert image to base64:', error)
-    return ''
+    console.error("Failed to convert image to base64:", error);
+    return "";
   }
 }
 
@@ -83,77 +83,87 @@ async function imageToBase64(imageUrl: string): Promise<string> {
 export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
   // Check cache first
   if (metadataCache.has(url)) {
-    console.log('📦 Using cached metadata for:', url)
-    return metadataCache.get(url)!
+    console.log("📦 Using cached metadata for:", url);
+    return metadataCache.get(url)!;
   }
 
   try {
-    console.log('🌐 Fetching metadata for:', url)
+    console.log("🌐 Fetching metadata for:", url);
 
     // Use AllOrigins CORS proxy
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
-    const response = await fetch(proxyUrl)
-    const data = await response.json()
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    const data = await response.json();
 
     // Parse the HTML
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(data.contents, 'text/html')
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(data.contents, "text/html");
 
     // Extract metadata with fallbacks
     const title =
-      doc.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content') ||
-      doc.querySelector('title')?.textContent ||
-      new URL(url).hostname
+      doc.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+      doc
+        .querySelector('meta[name="twitter:title"]')
+        ?.getAttribute("content") ||
+      doc.querySelector("title")?.textContent ||
+      new URL(url).hostname;
 
     const description =
-      doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
-      ''
+      doc
+        .querySelector('meta[property="og:description"]')
+        ?.getAttribute("content") ||
+      doc
+        .querySelector('meta[name="twitter:description"]')
+        ?.getAttribute("content") ||
+      doc.querySelector('meta[name="description"]')?.getAttribute("content") ||
+      "";
 
     let ogImage =
-      doc.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
-      doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') ||
-      ''
+      doc.querySelector('meta[property="og:image"]')?.getAttribute("content") ||
+      doc
+        .querySelector('meta[name="twitter:image"]')
+        ?.getAttribute("content") ||
+      "";
 
     // Convert image to base64 for caching if it exists
     if (ogImage) {
-      console.log('🖼️ Caching image for:', url)
-      const base64Image = await imageToBase64(ogImage)
+      console.log("🖼️ Caching image for:", url);
+      const base64Image = await imageToBase64(ogImage);
       if (base64Image) {
-        ogImage = base64Image // Replace URL with base64 data URI
+        ogImage = base64Image; // Replace URL with base64 data URI
       }
     }
 
     const metadata: LinkMetadata = {
       title: title.trim(),
       description: description.trim(),
-      ogImage: ogImage.trim()
-    }
+      ogImage: ogImage.trim(),
+    };
 
     // Cache the result
-    metadataCache.set(url, metadata)
-    saveCache()
+    metadataCache.set(url, metadata);
+    saveCache();
 
-    return metadata
+    return metadata;
   } catch (error) {
-    console.error('Failed to fetch metadata:', error)
-    const fallback = { title: new URL(url).hostname, description: '', ogImage: '' }
+    console.error("Failed to fetch metadata:", error);
+    const fallback = {
+      title: new URL(url).hostname,
+      description: "",
+      ogImage: "",
+    };
 
     // Cache the fallback to avoid repeated failures
-    metadataCache.set(url, fallback)
-    saveCache()
+    metadataCache.set(url, fallback);
+    saveCache();
 
-    return fallback
+    return fallback;
   }
 }
 
-
-
 export const getVersion = () => {
-  return "2.1.1"
-}
+  return "2.1.2";
+};
 
 /**
  * Formats a date string or Date object into a readable format like "Jan 14, 2024"
@@ -173,7 +183,9 @@ export function formatDate(date: string | Date | null | undefined): string {
 /**
  * Formats a date string or Date object into a relative time string like "2 mins ago"
  */
-export function formatRelativeTime(date: string | Date | null | undefined): string {
+export function formatRelativeTime(
+  date: string | Date | null | undefined,
+): string {
   if (!date) return "—";
   const d = new Date(date);
   if (isNaN(d.getTime())) return String(date);
@@ -186,16 +198,20 @@ export function formatRelativeTime(date: string | Date | null | undefined): stri
   if (diffInSeconds < 60) return `${diffInSeconds} sec ago`;
 
   const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes} min${diffInMinutes !== 1 ? "s" : ""} ago`;
+  if (diffInMinutes < 60)
+    return `${diffInMinutes} min${diffInMinutes !== 1 ? "s" : ""} ago`;
 
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours} hour${diffInHours !== 1 ? "s" : ""} ago`;
+  if (diffInHours < 24)
+    return `${diffInHours} hour${diffInHours !== 1 ? "s" : ""} ago`;
 
   const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 30) return `${diffInDays} day${diffInDays !== 1 ? "s" : ""} ago`;
+  if (diffInDays < 30)
+    return `${diffInDays} day${diffInDays !== 1 ? "s" : ""} ago`;
 
   const diffInMonths = Math.floor(diffInDays / 30);
-  if (diffInMonths < 12) return `${diffInMonths} month${diffInMonths !== 1 ? "s" : ""} ago`;
+  if (diffInMonths < 12)
+    return `${diffInMonths} month${diffInMonths !== 1 ? "s" : ""} ago`;
 
   const diffInYears = Math.floor(diffInMonths / 12);
   return `${diffInYears} year${diffInYears !== 1 ? "s" : ""} ago`;
@@ -207,7 +223,7 @@ export function formatRelativeTime(date: string | Date | null | undefined): stri
 export function truncateFileName(name: string, maxLength: number = 18): string {
   if (name.length <= maxLength) return name;
 
-  const lastDotIndex = name.lastIndexOf('.');
+  const lastDotIndex = name.lastIndexOf(".");
   if (lastDotIndex === -1) return `${name.slice(0, maxLength)}...`;
 
   const ext = name.slice(lastDotIndex);
@@ -222,15 +238,15 @@ export function truncateFileName(name: string, maxLength: number = 18): string {
  * Formats bytes into a human-readable string (KB, MB, GB, etc.)
  */
 export function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let value = bytes
-  let unitIndex = 0
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
 
   while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024
-    unitIndex += 1
+    value /= 1024;
+    unitIndex += 1;
   }
 
-  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 }
