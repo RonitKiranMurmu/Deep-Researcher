@@ -45,7 +45,7 @@ async def list_researches(
     sort_order: Literal["asc", "desc"] = Query("desc", alias="sortOrder"),
 ):
     try:
-        return static_orch.get_all_researches(
+        return await static_orch.get_all_researches(
             page=page,
             size=size,
             workspace_id=workspace_id,

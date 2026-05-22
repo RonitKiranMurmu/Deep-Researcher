@@ -15,6 +15,7 @@ from main.apis.models.research_static import (
 )
 from main.src.store.DBManager import history_db_manager, researches_db_manager
 from main.src.utils.DRLogger import quickLog
+from main.src.utils.core.task_schedular import scheduler
 
 
 class ResearchStaticOrchestrator:
@@ -44,7 +45,7 @@ class ResearchStaticOrchestrator:
     # RESEARCHES
     # ═══════════════════════════════════════════════════
 
-    def get_all_researches(
+    async def get_all_researches(
         self,
         page: int = 1,
         size: int = 20,
@@ -52,10 +53,13 @@ class ResearchStaticOrchestrator:
         sort_by: Literal["title", "created_at"] = "created_at",
         sort_order: Literal["asc", "desc"] = "desc",
     ) -> ResearchStaticListResponse:
-        quickLog(
-            f"Fetching all research-static records. page={page}, size={size}",
-            level="info",
-            module="API",
+        await scheduler.schedule(
+            quickLog,
+            params = {
+                "message": f"Fetching all research-static records. page={page} & size={size}",
+                "level": "info",
+                "module": "API",
+            }
         )
         
         where: dict[str, Any] = {}
@@ -90,11 +94,14 @@ class ResearchStaticOrchestrator:
             offset=offset,
         )
 
-    def get_research_by_id(self, research_id: str) -> ResearchStaticRecord:
-        quickLog(
-            f"Fetching research-static record {research_id}",
-            level="info",
-            module="API",
+    async def get_research_by_id(self, research_id: str) -> ResearchStaticRecord:
+        await scheduler.schedule(
+            quickLog,
+            params = {
+                "message": f"Fetching research-static record {research_id}",
+                "level": "info",
+                "module": "API",
+            }
         )
         result = researches_db_manager.fetch_one(
             "researches", where={"id": research_id}
