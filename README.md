@@ -13,7 +13,7 @@
 
 ---
 
-Deep Researcher is a complex research platform, that combines **Generative AI** with autonomous data gathering to deliver evidence-based insights. While the underlying architecture prioritizes functional delivery over strict efficiency—in short, it just works—it effectively acts as an intelligent analyst: reliably synthesizing information from the web, video, and structured sources into comprehensive, verifiable reports.
+Deep Researcher v2 is a complex research platform, that combines autonomous data gathering to deliver evidence-based insights. While the underlying architecture prioritizes functional delivery over strict efficiency—in short, it just works—it effectively acts as an intelligent analyst: reliably synthesizing information from the web, video, and structured sources into comprehensive, verifiable reports.
 
 This is **Deep Researcher V2** — a major evolution from the original agent. The current version introduces multi-step reasoning, workspace-based organization, persistent storage with full auditability, and robust failure handling, replacing the earlier single-flow, file-only approach.
 
