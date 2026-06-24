@@ -29,7 +29,7 @@ The following section highlights the major architectural and capability improvem
 
 | Feature                                  | Status |
 | ---------------------------------------- | ------ |
-| AI-powered autonomous research workflow  | ✅      |
+| Autonomous research workflow planning  | ✅      |
 | Multi-agent research orchestration       | ✅      |
 | Research planning and task decomposition | ✅      |
 | Intelligent query optimization           | ✅      |
